@@ -1,0 +1,44 @@
+<?php
+
+require_once('fpdf.php');
+require_once('fpdi.php');
+
+class AssinaturaDigital {
+    
+    private $documento;
+    private $chavePrivada;
+    
+    public function __construct($documento, $caminhoChavePrivada, $senhaChavePrivada) {
+        $this->documento = $documento;
+        $this->chavePrivada = openssl_pkey_get_private('file://' . $caminhoChavePrivada, $senhaChavePrivada);
+    }
+    
+    public function assinarCAdES() {
+        $assinatura = '';
+        openssl_sign(file_get_contents($this->documento), $assinatura, $this->chavePrivada, OPENSSL_ALGO_SHA256);
+        return base64_encode($assinatura);
+    }
+    
+    public function assinarPAdES() {
+        $pdf = new FPDI();
+        $qtdPaginas = $pdf->setSourceFile($this->documento);
+        $assinatura = $this->assinarCAdES();
+        
+        for ($pagina = 1; $pagina <= $qtdPaginas; $pagina++) {
+            $pdf->AddPage();
+            $pdf->setSourceFile($this->documento);
+            $tplIdx = $pdf->importPage($pagina);
+            $pdf->useTemplate($tplIdx, 0, 0, 0, 0, true);
+        }
+        
+        // adicionando a assinatura na última página do PDF
+        $pdf->AddPage();
+        $pdf->Image('data:image/png;base64,' . $assinatura, null, null, 0, 30, '', '', true, 150, 'B');
+        
+        $pdf->Output('documento_assinado.pdf', 'F');
+    }
+}
+
+// uso
+$assinaturaDigital = new AssinaturaDigital('documento.pdf', 'caminho/para/chave_privada.key', 'senha_da_chave_privada');
+$assinaturaDigital->assinarPAdES();
